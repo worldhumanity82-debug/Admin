@@ -7,6 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
 <style>
   :root {
     --cream: #faf6f0; --warm-white: #fefcf9;
@@ -23,6 +27,12 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
   body { font-family: 'DM Sans', sans-serif; background: var(--cream); color: var(--charcoal); min-height: 100vh; }
+
+  /* ── CROPPER THEME OVERRIDES ── */
+  .cropper-view-box { outline: 1px solid var(--gold) !important; }
+  .cropper-line { background-color: var(--gold) !important; }
+  .cropper-point { background-color: var(--gold) !important; }
+  .cropper-center::before, .cropper-center::after { background-color: var(--gold) !important; }
 
   /* ── LOGIN ── */
   #loginScreen {
@@ -234,6 +244,14 @@
   .visitor-big .num { font-family: 'Cormorant Garamond', serif; font-size: 6rem; font-weight: 700; color: var(--gold); line-height: 1; }
   .visitor-big .lbl { font-size: 1rem; color: var(--soft); margin-top: 0.5rem; }
 
+  /* Lightbox for Cropper */
+  .lightbox {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(26,20,16,0.95);
+    align-items: center; justify-content: center;
+  }
+  .lightbox.open { display: flex; }
+
   /* Mobile responsive */
   .menu-toggle { display: none; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--charcoal); }
   @media (max-width: 768px) {
@@ -252,7 +270,6 @@
 </head>
 <body>
 
-<!-- ── LOGIN SCREEN ── -->
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-globe">🌍</div>
@@ -271,11 +288,9 @@
   </div>
 </div>
 
-<!-- ── DASHBOARD ── -->
 <div id="dashboard">
   <div class="dash-layout">
 
-    <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-logo">🌍 World Humanity</div>
@@ -306,7 +321,6 @@
       </div>
     </aside>
 
-    <!-- Main -->
     <div class="dash-main">
       <div class="dash-header">
         <div>
@@ -321,7 +335,6 @@
 
       <div class="dash-content">
 
-        <!-- OVERVIEW PANEL -->
         <div class="panel active" id="panel-overview">
           <div class="stats-bar">
             <div class="stat-card">
@@ -369,7 +382,6 @@
           </div>
         </div>
 
-        <!-- UPDATES PANEL -->
         <div class="panel" id="panel-updates">
           <div class="section-card">
             <div class="section-card-title">➕ Add New Update</div>
@@ -396,7 +408,6 @@
           </div>
         </div>
 
-        <!-- GALLERY PANEL -->
         <div class="panel" id="panel-gallery">
           <div class="section-card">
             <div class="section-card-title">📤 Upload New Photo</div>
@@ -424,7 +435,6 @@
           </div>
         </div>
 
-        <!-- HONORS PANEL -->
         <div class="panel" id="panel-honors">
           <div class="section-card">
             <div class="section-card-title">🏅 Upload New Honor / Award</div>
@@ -432,7 +442,7 @@
               <div class="upload-icon">📜</div>
               <p>Click to select an image from your device</p>
               <p style="font-size:0.78rem;margin-top:0.3rem">JPG, PNG — Max 32MB</p>
-              <input type="file" id="honorFile" accept="image/*" onchange="previewFile(event, 'honorUploadPreview')" />
+              <input type="file" id="honorFile" accept="image/*" onchange="openHonorCropper(event)" />
               <img class="upload-preview" id="honorUploadPreview" alt="preview" />
             </div>
             <div class="progress-bar" id="honorUploadProgress"><div class="progress-fill" id="honorUploadProgressFill"></div></div>
@@ -452,7 +462,6 @@
           </div>
         </div>
 
-        <!-- VOLUNTEERS PANEL -->
         <div class="panel" id="panel-volunteers">
           <div class="section-card">
             <div class="section-card-title">👥 Volunteer Registrations</div>
@@ -475,7 +484,6 @@
           </div>
         </div>
 
-        <!-- VISITORS PANEL -->
         <div class="panel" id="panel-visitors">
           <div class="section-card">
             <div class="section-card-title">📈 Visitor Analytics</div>
@@ -492,10 +500,23 @@
   </div>
 </div>
 
-<!-- Toast -->
+<div class="lightbox" id="cropperModal" style="z-index: 10000;">
+  <div style="background: var(--warm-white); padding: 1.5rem; border-radius: 16px; width: 90%; max-width: 600px; box-shadow: var(--shadow);">
+    <h3 style="font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; margin-bottom: 1rem; color: var(--deep);">Crop Award Image</h3>
+    
+    <div style="max-height: 50vh; overflow: hidden; margin-bottom: 1.5rem; background: var(--cream); border-radius: 8px;">
+      <img id="cropperImage" style="max-width: 100%; display: block;" />
+    </div>
+    
+    <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+      <button class="btn-del" style="background: var(--cream); color: var(--charcoal); border: 1px solid var(--glass-border);" onclick="closeCropper()">Cancel</button>
+      <button class="btn-add" onclick="applyCrop()">✅ Apply Crop</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
-<!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
@@ -562,7 +583,7 @@
     await Promise.all([loadUpdates(), loadGallery(), loadHonors(), loadVolunteers(), loadVisitors()]);
   }
 
-  // Helper for file preview
+  // Helper for file preview (Gallery)
   window.previewFile = (e, targetId) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -578,7 +599,6 @@
     
     progressFillElem.style.width = '50%';
     
-    // Fix: Pass the API key directly in the URL instead of the form data
     const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { 
       method: 'POST', 
       body: formData 
@@ -586,7 +606,6 @@
     
     const json = await res.json();
     
-    // This logs the exact error to your browser console if it fails again
     if (!json.success) {
       console.error("ImgBB Error Details:", json);
       throw new Error(json.error?.message || 'ImgBB upload failed');
@@ -595,7 +614,6 @@
     progressFillElem.style.width = '80%';
     return json.data.url;
   }
-
 
   // ── UPDATES ──
   async function loadUpdates() {
@@ -692,6 +710,57 @@
     catch { showToast('❌ Failed to delete.'); }
   };
 
+  // ── CROPPER LOGIC (HONORS) ──
+  let honorCropper = null;
+  let croppedHonorBlob = null; 
+
+  window.openHonorCropper = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const url = URL.createObjectURL(file);
+    const image = document.getElementById('cropperImage');
+    image.src = url;
+
+    document.getElementById('cropperModal').classList.add('open');
+
+    // Destroy old cropper instance if it exists
+    if (honorCropper) {
+      honorCropper.destroy();
+    }
+
+    // Initialize Cropper with strict aspect ratio based on website honor card sizing
+    honorCropper = new Cropper(image, {
+      aspectRatio: 232 / 200, // This locks the ratio to exactly match the index display
+      viewMode: 2,         
+      autoCropArea: 1,     
+      responsive: true,
+    });
+  };
+
+  window.closeCropper = () => {
+    document.getElementById('cropperModal').classList.remove('open');
+    if (honorCropper) honorCropper.destroy();
+    document.getElementById('honorFile').value = ''; 
+  };
+
+  window.applyCrop = () => {
+    if (!honorCropper) return;
+
+    honorCropper.getCroppedCanvas({
+      maxWidth: 1200, 
+      maxHeight: 1200
+    }).toBlob((blob) => {
+      croppedHonorBlob = blob;
+      
+      const preview = document.getElementById('honorUploadPreview');
+      preview.src = URL.createObjectURL(blob);
+      preview.style.display = 'block';
+
+      closeCropper();
+    }, 'image/jpeg', 0.85); 
+  };
+
   // ── HONORS ──
   async function loadHonors() {
     const grid = document.getElementById('honorsAdminGrid');
@@ -715,9 +784,10 @@
   }
 
   window.uploadAndAddHonor = async () => {
-    const file = document.getElementById('honorFile').files[0];
+    const file = croppedHonorBlob; 
     const title = document.getElementById('honorTitle').value.trim();
-    if (!file) return showToast('⚠️ Please select a certificate/award image first.');
+    
+    if (!file) return showToast('⚠️ Please select and crop an image first.');
     if (!title) return showToast('⚠️ Please enter a title for this honor.');
     
     const btn = document.getElementById('honorUploadBtn');
@@ -726,14 +796,19 @@
     
     btn.innerHTML = '<span class="spinner"></span> Uploading...'; btn.disabled = true;
     progressBar.style.display = 'block'; progressFill.style.width = '20%';
+    
     try {
       const url = await uploadToImgBB(file, progressFill);
       await addDoc(collection(db, 'honors'), { url, title: title, addedAt: serverTimestamp() });
+      
       progressFill.style.width = '100%';
       showToast('🏆 Honor successfully added!');
+      
       document.getElementById('honorFile').value = '';
       document.getElementById('honorTitle').value = '';
       document.getElementById('honorUploadPreview').style.display = 'none';
+      croppedHonorBlob = null; 
+      
       setTimeout(() => { progressBar.style.display = 'none'; progressFill.style.width = '0%'; }, 800);
       loadHonors();
     } catch (err) {
