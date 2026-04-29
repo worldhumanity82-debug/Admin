@@ -485,15 +485,37 @@
         </div>
 
         <div class="panel" id="panel-visitors">
+          
           <div class="section-card">
-            <div class="section-card-title">📈 Visitor Analytics</div>
-            <div class="visitor-big">
+            <div class="section-card-title">📈 Unique Visitor Analytics</div>
+            <div class="visitor-big" style="padding: 2rem;">
               <div class="num" id="visitorBigNum">—</div>
-              <div class="lbl">Total Site Visitors (all time)</div>
-              <p style="margin-top:2rem;color:var(--soft);font-size:0.9rem">Visitor count is tracked automatically on every page visit. Each unique session on the main site increments this counter via Firebase Firestore.</p>
+              <div class="lbl">Total Unique Visitors (All Time)</div>
+              <p style="margin-top:1rem;color:var(--soft);font-size:0.85rem;line-height:1.5;">
+                Visitors are now tracked optimally. If a user refreshes the page multiple times, it only counts as 1 unique visit per day.
+              </p>
             </div>
           </div>
+
+          <div class="section-card">
+            <div class="section-card-title">📅 Daily Unique Visitors (Last 30 Days)</div>
+            <div class="vol-table-wrap">
+              <table class="vol-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th style="text-align: right;">Unique Visitors</th>
+                  </tr>
+                </thead>
+                <tbody id="dailyVisitorsTbody">
+                  <tr><td colspan="2" style="text-align:center;color:var(--soft);padding:2rem">Loading daily data...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
+
 
       </div>
     </div>
@@ -849,13 +871,51 @@
 
   // ── VISITORS ──
   async function loadVisitors() {
+    // 1. Load All-Time Global Count
     try {
       const snap = await getDoc(doc(db, 'analytics', 'visitors'));
       const count = snap.exists() ? (snap.data().count || 0) : 0;
       document.getElementById('stat-visitors').textContent = count.toLocaleString();
       document.getElementById('visitorBigNum').textContent = count.toLocaleString();
     } catch {}
+
+    // 2. Load Daily Data
+    const tbody = document.getElementById('dailyVisitorsTbody');
+    try {
+      // Import 'limit' if you haven't already at the top of your script
+      const { query, collection, orderBy, getDocs, limit } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      
+      // Get the last 30 days of data, ordered newest first
+      const q = query(collection(db, 'analytics_daily'), orderBy('date', 'desc'), limit(30));
+      const snap = await getDocs(q);
+
+      if (snap.empty) { 
+        tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--soft);padding:2rem">No daily data recorded yet. Wait for a new visitor!</td></tr>'; 
+        return; 
+      }
+      
+      tbody.innerHTML = '';
+      snap.forEach(d => {
+        const data = d.data();
+        
+        // Format the date nicely (e.g., Wed, 29 Apr 2026)
+        const dateObj = new Date(data.date);
+        const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${dateStr}</strong></td>
+          <td style="text-align: right; color: var(--gold); font-weight: 700; font-size: 1.1rem;">
+            ${data.count.toLocaleString()}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (err) { 
+      tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--red);">Error loading daily statistics.</td></tr>'; 
+    }
   }
+
 
   // Enter key on login
   document.addEventListener('keydown', e => {
