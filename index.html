@@ -306,6 +306,9 @@
         <div class="nav-item" data-panel="gallery" onclick="showPanel('gallery')">
           <span class="nav-icon">🖼️</span> Gallery
         </div>
+        <div class="nav-item" data-panel="hero_slider" onclick="showPanel('hero_slider')">
+          <span class="nav-icon">🎞️</span> Hero Slider
+        </div>
         <div class="nav-item" data-panel="honors" onclick="showPanel('honors')">
           <span class="nav-icon">🏆</span> Honors & Awards
         </div>
@@ -430,6 +433,39 @@
           <div class="section-card">
             <div class="section-card-title">🖼️ Gallery Photos</div>
             <div class="gallery-admin-grid" id="galleryAdminGrid">
+              <div class="list-empty" style="grid-column:1/-1">Loading...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── HERO SLIDER PANEL ── -->
+        <div class="panel" id="panel-hero_slider">
+          <div class="section-card">
+            <div class="section-card-title">🎞️ Upload New Slider Image</div>
+            <div class="upload-area" onclick="document.getElementById('sliderFile').click()">
+              <div class="upload-icon">🖼️</div>
+              <p>Click to select an image from your device</p>
+              <p style="font-size:0.78rem;margin-top:0.3rem">JPG, PNG — Landscape recommended — Max 32MB</p>
+              <input type="file" id="sliderFile" accept="image/*" onchange="previewFile(event,'sliderPreview')" />
+              <img class="upload-preview" id="sliderPreview" alt="preview" />
+            </div>
+            <div class="progress-bar" id="sliderUploadProgress"><div class="progress-fill" id="sliderUploadProgressFill"></div></div>
+            <div class="form-row">
+              <div>
+                <label class="lbl">Caption / Alt text (optional)</label>
+                <input type="text" class="inp" id="sliderCaption" placeholder="e.g., Food distribution drive 2024" />
+              </div>
+              <div>
+                <label class="lbl">Display Order (number)</label>
+                <input type="number" class="inp" id="sliderOrder" placeholder="1" min="1" value="1" />
+              </div>
+            </div>
+            <button class="btn-add" id="sliderUploadBtn" onclick="uploadAndAddSlider()">🎞️ Upload & Add to Slider</button>
+          </div>
+          <div class="section-card">
+            <div class="section-card-title">🖼️ Current Slider Images</div>
+            <p style="color:var(--mid);font-size:0.85rem;margin-bottom:1rem">These images rotate automatically on the homepage hero section. Lower order number = shown first.</p>
+            <div class="gallery-admin-grid" id="sliderAdminGrid">
               <div class="list-empty" style="grid-column:1/-1">Loading...</div>
             </div>
           </div>
@@ -602,7 +638,7 @@
 
   // ── Load All ──
   async function loadAll() {
-    await Promise.all([loadUpdates(), loadGallery(), loadHonors(), loadVolunteers(), loadVisitors()]);
+    await Promise.all([loadUpdates(), loadGallery(), loadHonors(), loadHeroSlider(), loadVolunteers(), loadVisitors()]);
   }
 
   // Helper for file preview (Gallery)
@@ -845,6 +881,69 @@
     catch { showToast('❌ Failed to delete.'); }
   };
 
+  // ── HERO SLIDER ──
+  async function loadHeroSlider() {
+    const grid = document.getElementById('sliderAdminGrid');
+    if (!grid) return;
+    try {
+      const q    = query(collection(db, 'hero_slider'), orderBy('order', 'asc'));
+      const snap = await getDocs(q);
+      if (snap.empty) { grid.innerHTML = '<div class="list-empty" style="grid-column:1/-1">No slider images yet. Upload your first one above!</div>'; return; }
+      grid.innerHTML = '';
+      snap.forEach(d => {
+        const data = d.data();
+        const item = document.createElement('div');
+        item.className = 'gallery-admin-item';
+        item.innerHTML = `
+          <img src="${data.url}" alt="${data.caption || 'Slide'}" />
+          <div class="del-overlay" onclick="deleteSlider('${d.id}')">🗑 Delete</div>
+          <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:#fff;font-size:0.7rem;padding:4px 6px;text-align:center;">
+            #${data.order || '?'} ${data.caption ? '· ' + data.caption : ''}
+          </div>`;
+        grid.appendChild(item);
+      });
+    } catch { grid.innerHTML = '<div class="list-empty" style="grid-column:1/-1">Error loading slider images.</div>'; }
+  }
+
+  window.uploadAndAddSlider = async () => {
+    const file     = document.getElementById('sliderFile').files[0];
+    const caption  = document.getElementById('sliderCaption').value.trim();
+    const order    = parseInt(document.getElementById('sliderOrder').value) || 1;
+    const btn      = document.getElementById('sliderUploadBtn');
+    const progressFill = document.getElementById('sliderUploadProgressFill');
+
+    if (!file) { showToast('⚠️ Please select an image first.'); return; }
+
+    btn.disabled = true; btn.textContent = '⏳ Uploading...';
+    progressFill.style.width = '10%';
+    try {
+      const url = await uploadToImgBB(file, progressFill);
+      progressFill.style.width = '90%';
+      await addDoc(collection(db, 'hero_slider'), {
+        url, caption, order,
+        addedAt: new Date().toISOString()
+      });
+      progressFill.style.width = '100%';
+      showToast('✅ Slider image added!');
+      document.getElementById('sliderFile').value = '';
+      document.getElementById('sliderPreview').style.display = 'none';
+      document.getElementById('sliderCaption').value = '';
+      document.getElementById('sliderOrder').value = '1';
+      setTimeout(() => { progressFill.style.width = '0'; }, 800);
+      loadHeroSlider();
+    } catch {
+      showToast('❌ Upload failed. Check ImgBB key or file size.');
+      progressFill.style.width = '0';
+    }
+    btn.disabled = false; btn.textContent = '🎞️ Upload & Add to Slider';
+  };
+
+  window.deleteSlider = async (id) => {
+    if (!confirm('Remove this slide from the homepage rotation?')) return;
+    try { await deleteDoc(doc(db, 'hero_slider', id)); showToast('🗑 Slide removed.'); loadHeroSlider(); }
+    catch { showToast('❌ Failed to delete.'); }
+  };
+
   // ── VOLUNTEERS ──
   async function loadVolunteers() {
     const tbody = document.getElementById('volunteersTbody');
@@ -929,6 +1028,7 @@
     overview: ['Overview', 'Welcome to your admin panel'],
     updates: ['News & Updates', 'Manage activity updates shown on the main site'],
     gallery: ['Gallery', 'Upload and manage photos for the live gallery'],
+    hero_slider: ['Hero Slider', 'Manage the rotating image banner at the top of the homepage'],
     honors: ['Honors & Awards', 'Manage dynamic recognition certificates and awards'],
     volunteers: ['Volunteer Registrations', 'View all volunteer applications'],
     visitors: ['Visitor Analytics', 'Track total site visitors']
